@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CircularProgress } from '@mui/material';
+import HabitStats from './HabitStats';
+import HabitTemplatesDialog from './HabitTemplatesDialog';
 import {
   Box,
   List,
@@ -15,9 +17,46 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  Chip,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Stack,
+  Divider,
+  Tooltip,
 } from '@mui/material';
-import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon, Star as StarIcon, Schedule as ScheduleIcon, LibraryBooks as TemplatesIcon } from '@mui/icons-material';
 import { format } from 'date-fns';
+
+const HABIT_CATEGORIES = [
+  'General', 'Health & Fitness', 'Productivity', 'Personal Development', 
+  'Relationships', 'Finance', 'Hobbies', 'Mindfulness', 'Learning'
+];
+
+const DAYS_OF_WEEK = [
+  { label: 'Sun', value: 0 },
+  { label: 'Mon', value: 1 },
+  { label: 'Tue', value: 2 },
+  { label: 'Wed', value: 3 },
+  { label: 'Thu', value: 4 },
+  { label: 'Fri', value: 5 },
+  { label: 'Sat', value: 6 },
+];
+
+const getDifficultyColor = (difficulty: string) => {
+  switch (difficulty) {
+    case 'easy': return 'success';
+    case 'hard': return 'error';
+    default: return 'warning';
+  }
+};
+
+const getCategoryColor = (category: string) => {
+  const colors = ['primary', 'secondary', 'success', 'warning', 'error', 'info'];
+  const index = category.length % colors.length;
+  return colors[index];
+};
 
 interface Habit {
   id: string;
@@ -29,6 +68,11 @@ interface Habit {
   };
   currentStreak: number;
   bestStreak: number;
+  category: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  scheduledDays: number[]; // 0 = Sunday, 1 = Monday, etc.
+  notes: string;
+  description: string;
 }
 
 const HabitList: React.FC = () => {
@@ -58,7 +102,12 @@ const HabitList: React.FC = () => {
             createdAt: createdAtDate,
             weeklyProgress: habit.weeklyProgress || {},
             currentStreak: Number(habit.currentStreak) || 0,
-            bestStreak: Number(habit.bestStreak) || 0
+            bestStreak: Number(habit.bestStreak) || 0,
+            category: habit.category || 'General',
+            difficulty: habit.difficulty || 'medium',
+            scheduledDays: habit.scheduledDays || [1, 2, 3, 4, 5, 6, 0], // Default to all days
+            notes: habit.notes || '',
+            description: habit.description || ''
           };
         });
         setHabits(parsedHabits);
@@ -75,14 +124,32 @@ const HabitList: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [habitName, setHabitName] = useState('');
+  const [habitCategory, setHabitCategory] = useState('General');
+  const [habitDifficulty, setHabitDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
+  const [habitScheduledDays, setHabitScheduledDays] = useState<number[]>([1, 2, 3, 4, 5, 6, 0]);
+  const [habitNotes, setHabitNotes] = useState('');
+  const [habitDescription, setHabitDescription] = useState('');
+  const [filterCategory, setFilterCategory] = useState('All');
+  const [sortBy, setSortBy] = useState<'name' | 'created' | 'streak' | 'difficulty'>('created');
+  const [templatesOpen, setTemplatesOpen] = useState(false);
 
   const handleOpenDialog = (habit?: Habit) => {
     if (habit) {
       setEditingHabit(habit);
       setHabitName(habit.name);
+      setHabitCategory(habit.category);
+      setHabitDifficulty(habit.difficulty);
+      setHabitScheduledDays(habit.scheduledDays);
+      setHabitNotes(habit.notes);
+      setHabitDescription(habit.description);
     } else {
       setEditingHabit(null);
       setHabitName('');
+      setHabitCategory('General');
+      setHabitDifficulty('medium');
+      setHabitScheduledDays([1, 2, 3, 4, 5, 6, 0]);
+      setHabitNotes('');
+      setHabitDescription('');
     }
     setOpen(true);
   };
@@ -91,6 +158,11 @@ const HabitList: React.FC = () => {
     setOpen(false);
     setEditingHabit(null);
     setHabitName('');
+    setHabitCategory('General');
+    setHabitDifficulty('medium');
+    setHabitScheduledDays([1, 2, 3, 4, 5, 6, 0]);
+    setHabitNotes('');
+    setHabitDescription('');
   };
 
   const handleSaveHabit = () => {
@@ -101,7 +173,15 @@ const HabitList: React.FC = () => {
           // Edit existing habit
           newHabits = prevHabits.map(habit =>
             habit.id === editingHabit.id
-              ? { ...habit, name: habitName.trim() }
+              ? { 
+                  ...habit, 
+                  name: habitName.trim(),
+                  category: habitCategory,
+                  difficulty: habitDifficulty,
+                  scheduledDays: habitScheduledDays,
+                  notes: habitNotes,
+                  description: habitDescription
+                }
               : habit
           );
         } else {
@@ -113,7 +193,12 @@ const HabitList: React.FC = () => {
             createdAt: new Date(),
             weeklyProgress: {},
             currentStreak: 0,
-            bestStreak: 0
+            bestStreak: 0,
+            category: habitCategory,
+            difficulty: habitDifficulty,
+            scheduledDays: habitScheduledDays,
+            notes: habitNotes,
+            description: habitDescription
           };
           newHabits = [...prevHabits, newHabit];
         }
@@ -126,10 +211,16 @@ const HabitList: React.FC = () => {
 
   const handleToggleHabit = (id: string) => {
     const today = format(new Date(), 'yyyy-MM-dd');
+    const todayDayOfWeek = new Date().getDay();
     
     setHabits(prevHabits => {
       const habit = prevHabits.find(h => h.id === id);
       if (!habit) return prevHabits;
+
+      // Check if habit is scheduled for today
+      if (!habit.scheduledDays.includes(todayDayOfWeek)) {
+        return prevHabits; // Don't allow toggle if not scheduled for today
+      }
 
       const wasCompleted = habit.weeklyProgress[today];
       const newProgress = { ...habit.weeklyProgress, [today]: !wasCompleted };
@@ -168,6 +259,36 @@ const HabitList: React.FC = () => {
     });
   };
 
+  const handleSelectTemplate = (template: any) => {
+    setHabitName(template.name);
+    setHabitCategory(template.category);
+    setHabitDifficulty(template.difficulty);
+    setHabitScheduledDays(template.scheduledDays);
+    setHabitNotes(template.notes);
+    setHabitDescription(template.description);
+    setTemplatesOpen(false);
+    setOpen(true);
+  };
+
+  // Filter and sort habits
+  const filteredAndSortedHabits = habits
+    .filter(habit => filterCategory === 'All' || habit.category === filterCategory)
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'created':
+          return b.createdAt.getTime() - a.createdAt.getTime();
+        case 'streak':
+          return b.currentStreak - a.currentStreak;
+        case 'difficulty':
+          const difficultyOrder = { easy: 1, medium: 2, hard: 3 };
+          return difficultyOrder[b.difficulty] - difficultyOrder[a.difficulty];
+        default:
+          return 0;
+      }
+    });
+
   if (isLoading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="50vh">
@@ -178,112 +299,333 @@ const HabitList: React.FC = () => {
 
   return (
     <Box>
+      <HabitStats habits={habits} />
+      
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h5">My Habits</Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => handleOpenDialog()}
-        >
-          Add Habit
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="outlined"
+            startIcon={<TemplatesIcon />}
+            onClick={() => setTemplatesOpen(true)}
+          >
+            Templates
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenDialog()}
+          >
+            Add Habit
+          </Button>
+        </Box>
+      </Box>
+
+      {/* Filter and Sort Controls */}
+      <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap', alignItems: 'center' }}>
+        <FormControl size="small" sx={{ minWidth: 120 }}>
+          <InputLabel>Category</InputLabel>
+          <Select
+            value={filterCategory}
+            label="Category"
+            onChange={(e) => setFilterCategory(e.target.value)}
+          >
+            <MenuItem value="All">All</MenuItem>
+            {HABIT_CATEGORIES.map((category) => (
+              <MenuItem key={category} value={category}>
+                {category}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <FormControl size="small" sx={{ minWidth: 120 }}>
+          <InputLabel>Sort By</InputLabel>
+          <Select
+            value={sortBy}
+            label="Sort By"
+            onChange={(e) => setSortBy(e.target.value as 'name' | 'created' | 'streak' | 'difficulty')}
+          >
+            <MenuItem value="created">Created Date</MenuItem>
+            <MenuItem value="name">Name</MenuItem>
+            <MenuItem value="streak">Current Streak</MenuItem>
+            <MenuItem value="difficulty">Difficulty</MenuItem>
+          </Select>
+        </FormControl>
+
+        <Typography variant="body2" color="text.secondary">
+          {filteredAndSortedHabits.length} habit{filteredAndSortedHabits.length !== 1 ? 's' : ''}
+          {filterCategory !== 'All' && ` in ${filterCategory}`}
+        </Typography>
       </Box>
 
       <List>
-        {habits.map((habit) => (
-          <ListItem
-            key={habit.id}
-            sx={{
-              bgcolor: 'background.paper',
-              mb: 1,
-              borderRadius: 1,
-              boxShadow: 1,
-            }}
-          >
-            <Checkbox
-              checked={habit.completed}
-              onChange={() => handleToggleHabit(habit.id)}
-            />
-            <ListItemText
-              primary={habit.name}
-              secondary={
-                <Box>
-                  <Typography variant="body2">{`Created on ${format(habit.createdAt, 'PP')}`}</Typography>
-                  <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                    {Array.from({ length: 7 }).map((_, index) => {
-                      const date = new Date();
-                      date.setDate(date.getDate() - index);
-                      const dateStr = format(date, 'yyyy-MM-dd');
-                      const dayName = format(date, 'EEE');
-                      return (
-                        <Box key={dateStr} sx={{ textAlign: 'center' }}>
-                          <Typography variant="caption">{dayName}</Typography>
-                          <Box
-                            sx={{
-                              width: 20,
-                              height: 20,
-                              borderRadius: '50%',
-                              bgcolor: habit.weeklyProgress[dateStr] ? 'success.main' : 'action.disabledBackground',
-                              mt: 0.5
-                            }}
-                          />
-                        </Box>
-                      );
-                    })}
-                  </Box>
-                  <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>
-                    Current Streak: {habit.currentStreak} days | Best Streak: {habit.bestStreak} days
-                  </Typography>
-                </Box>
+        {filteredAndSortedHabits.length === 0 ? (
+          <Box sx={{ textAlign: 'center', py: 6 }}>
+            <Typography variant="h6" color="text.secondary" gutterBottom>
+              {habits.length === 0 
+                ? "No habits yet! Create your first habit to get started." 
+                : `No habits found in ${filterCategory === 'All' ? 'any category' : filterCategory}.`
               }
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              {habits.length === 0 
+                ? "Start building positive habits today!"
+                : "Try changing your filter or create a new habit."
+              }
+            </Typography>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => handleOpenDialog()}
+            >
+              Add Your First Habit
+            </Button>
+          </Box>
+        ) : (
+          filteredAndSortedHabits.map((habit) => {
+          const todayDayOfWeek = new Date().getDay();
+          const isScheduledToday = habit.scheduledDays.includes(todayDayOfWeek);
+          
+          return (
+            <ListItem
+              key={habit.id}
               sx={{
-                '& .MuiListItemText-primary': {
-                  textDecoration: habit.completed ? 'line-through' : 'none',
-                  color: habit.completed ? 'text.secondary' : 'text.primary',
-                },
+                bgcolor: 'background.paper',
+                mb: 1,
+                borderRadius: 1,
+                boxShadow: 1,
+                opacity: isScheduledToday ? 1 : 0.6,
               }}
-            />
-            <ListItemSecondaryAction>
-              <IconButton
-                edge="end"
-                aria-label="edit"
-                onClick={() => handleOpenDialog(habit)}
-                sx={{ mr: 1 }}
-              >
-                <EditIcon />
-              </IconButton>
-              <IconButton
-                edge="end"
-                aria-label="delete"
-                onClick={() => handleDeleteHabit(habit.id)}
-              >
-                <DeleteIcon />
-              </IconButton>
-            </ListItemSecondaryAction>
-          </ListItem>
-        ))}
+            >
+              <Tooltip title={isScheduledToday ? "Click to mark complete" : "Not scheduled for today"}>
+                <Checkbox
+                  checked={habit.completed}
+                  onChange={() => handleToggleHabit(habit.id)}
+                  disabled={!isScheduledToday}
+                />
+              </Tooltip>
+              <ListItemText
+                primary={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                    <Typography
+                      sx={{
+                        textDecoration: habit.completed ? 'line-through' : 'none',
+                        color: habit.completed ? 'text.secondary' : 'text.primary',
+                        fontWeight: 'medium',
+                      }}
+                    >
+                      {habit.name}
+                    </Typography>
+                    <Chip
+                      size="small"
+                      label={habit.category}
+                      color={getCategoryColor(habit.category) as any}
+                      variant="outlined"
+                    />
+                    <Chip
+                      size="small"
+                      icon={<StarIcon />}
+                      label={habit.difficulty}
+                      color={getDifficultyColor(habit.difficulty) as any}
+                    />
+                    {!isScheduledToday && (
+                      <Chip
+                        size="small"
+                        icon={<ScheduleIcon />}
+                        label="Not today"
+                        variant="outlined"
+                      />
+                    )}
+                  </Box>
+                }
+                secondary={
+                  <Box>
+                    {habit.description && (
+                      <Typography variant="body2" sx={{ mb: 1 }}>
+                        {habit.description}
+                      </Typography>
+                    )}
+                    <Typography variant="body2">{`Created on ${format(habit.createdAt, 'PP')}`}</Typography>
+                    <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                      {Array.from({ length: 7 }).map((_, index) => {
+                        const date = new Date();
+                        date.setDate(date.getDate() - index);
+                        const dateStr = format(date, 'yyyy-MM-dd');
+                        const dayName = format(date, 'EEE');
+                        const dayOfWeek = date.getDay();
+                        const isScheduled = habit.scheduledDays.includes(dayOfWeek);
+                        return (
+                          <Box key={dateStr} sx={{ textAlign: 'center' }}>
+                            <Typography variant="caption">{dayName}</Typography>
+                            <Box
+                              sx={{
+                                width: 20,
+                                height: 20,
+                                borderRadius: '50%',
+                                bgcolor: !isScheduled 
+                                  ? 'action.disabled'
+                                  : habit.weeklyProgress[dateStr] 
+                                    ? 'success.main' 
+                                    : 'action.disabledBackground',
+                                mt: 0.5,
+                                border: !isScheduled ? '1px dashed' : 'none',
+                              }}
+                            />
+                          </Box>
+                        );
+                      })}
+                    </Box>
+                    <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>
+                      Current Streak: {habit.currentStreak} days | Best Streak: {habit.bestStreak} days
+                    </Typography>
+                    <Typography variant="caption" sx={{ display: 'block' }}>
+                      Scheduled: {habit.scheduledDays.map(day => DAYS_OF_WEEK.find(d => d.value === day)?.label).join(', ')}
+                    </Typography>
+                    {habit.notes && (
+                      <Typography variant="caption" sx={{ display: 'block', mt: 0.5, fontStyle: 'italic' }}>
+                        Notes: {habit.notes}
+                      </Typography>
+                    )}
+                  </Box>
+                }
+                sx={{
+                  '& .MuiListItemText-primary': {
+                    textDecoration: habit.completed ? 'line-through' : 'none',
+                    color: habit.completed ? 'text.secondary' : 'text.primary',
+                  },
+                }}
+              />
+              <ListItemSecondaryAction>
+                <IconButton
+                  edge="end"
+                  aria-label="edit"
+                  onClick={() => handleOpenDialog(habit)}
+                  sx={{ mr: 1 }}
+                >
+                  <EditIcon />
+                </IconButton>
+                <IconButton
+                  edge="end"
+                  aria-label="delete"
+                  onClick={() => handleDeleteHabit(habit.id)}
+                >
+                  <DeleteIcon />
+                </IconButton>
+              </ListItemSecondaryAction>
+            </ListItem>
+          );
+        }))}
       </List>
 
-      <Dialog open={open} onClose={handleCloseDialog}>
+      <Dialog open={open} onClose={handleCloseDialog} maxWidth="md" fullWidth>
         <DialogTitle>{editingHabit ? 'Edit Habit' : 'Add New Habit'}</DialogTitle>
         <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Habit Name"
-            type="text"
-            fullWidth
-            value={habitName}
-            onChange={(e) => setHabitName(e.target.value)}
-          />
+          <Stack spacing={3} sx={{ mt: 1 }}>
+            <TextField
+              autoFocus
+              label="Habit Name"
+              type="text"
+              fullWidth
+              value={habitName}
+              onChange={(e) => setHabitName(e.target.value)}
+              required
+            />
+            
+            <TextField
+              label="Description"
+              type="text"
+              fullWidth
+              multiline
+              rows={2}
+              value={habitDescription}
+              onChange={(e) => setHabitDescription(e.target.value)}
+              placeholder="What is this habit about?"
+            />
+
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <FormControl fullWidth>
+                <InputLabel>Category</InputLabel>
+                <Select
+                  value={habitCategory}
+                  label="Category"
+                  onChange={(e) => setHabitCategory(e.target.value)}
+                >
+                  {HABIT_CATEGORIES.map((category) => (
+                    <MenuItem key={category} value={category}>
+                      {category}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <FormControl fullWidth>
+                <InputLabel>Difficulty</InputLabel>
+                <Select
+                  value={habitDifficulty}
+                  label="Difficulty"
+                  onChange={(e) => setHabitDifficulty(e.target.value as 'easy' | 'medium' | 'hard')}
+                >
+                  <MenuItem value="easy">Easy</MenuItem>
+                  <MenuItem value="medium">Medium</MenuItem>
+                  <MenuItem value="hard">Hard</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Scheduled Days
+              </Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap">
+                {DAYS_OF_WEEK.map((day) => (
+                  <Chip
+                    key={day.value}
+                    label={day.label}
+                    onClick={() => {
+                      if (habitScheduledDays.includes(day.value)) {
+                        setHabitScheduledDays(habitScheduledDays.filter(d => d !== day.value));
+                      } else {
+                        setHabitScheduledDays([...habitScheduledDays, day.value]);
+                      }
+                    }}
+                    color={habitScheduledDays.includes(day.value) ? 'primary' : 'default'}
+                    variant={habitScheduledDays.includes(day.value) ? 'filled' : 'outlined'}
+                  />
+                ))}
+              </Stack>
+              <Typography variant="caption" color="text.secondary">
+                Select the days when you want to perform this habit
+              </Typography>
+            </Box>
+
+            <Divider />
+
+            <TextField
+              label="Notes"
+              type="text"
+              fullWidth
+              multiline
+              rows={3}
+              value={habitNotes}
+              onChange={(e) => setHabitNotes(e.target.value)}
+              placeholder="Any additional notes, tips, or reminders for this habit..."
+            />
+          </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button onClick={handleSaveHabit} variant="contained">
-            {editingHabit ? 'Save' : 'Add'}
+          <Button onClick={handleSaveHabit} variant="contained" disabled={!habitName.trim()}>
+            {editingHabit ? 'Save Changes' : 'Add Habit'}
           </Button>
         </DialogActions>
       </Dialog>
+
+      <HabitTemplatesDialog 
+        open={templatesOpen} 
+        onClose={() => setTemplatesOpen(false)} 
+        onSelectTemplate={handleSelectTemplate}
+      />
     </Box>
   );
 };

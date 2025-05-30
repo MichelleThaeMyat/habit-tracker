@@ -1,5 +1,19 @@
 import React, { Suspense } from 'react';
-import { Box, AppBar, Toolbar, Typography, Container, CssBaseline, Tabs, Tab, CircularProgress } from '@mui/material';
+import { 
+  Box, 
+  AppBar, 
+  Toolbar, 
+  Typography, 
+  Container, 
+  CssBaseline, 
+  Tabs, 
+  Tab, 
+  CircularProgress, 
+  IconButton,
+  Tooltip,
+  PaletteMode 
+} from '@mui/material';
+import { Brightness4, Brightness7 } from '@mui/icons-material';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 
 const LoadingSpinner = () => (
@@ -8,7 +22,12 @@ const LoadingSpinner = () => (
   </Box>
 );
 
-const Layout: React.FC = () => {
+interface LayoutProps {
+  mode: PaletteMode;
+  toggleTheme: () => void;
+}
+
+const Layout: React.FC<LayoutProps> = ({ mode, toggleTheme }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -24,6 +43,11 @@ const Layout: React.FC = () => {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Personal Tracker
           </Typography>
+          <Tooltip title={`Switch to ${mode === 'light' ? 'dark' : 'light'} mode`}>
+            <IconButton color="inherit" onClick={toggleTheme}>
+              {mode === 'light' ? <Brightness4 /> : <Brightness7 />}
+            </IconButton>
+          </Tooltip>
         </Toolbar>
         <Tabs
           value={location.pathname.split('/')[1] || 'habits'}

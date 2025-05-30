@@ -1,20 +1,27 @@
-import React, { Suspense, useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { ThemeProvider, createTheme, CircularProgress, Box, PaletteMode } from '@mui/material';
-import Layout from './components/Layout';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createTheme, Theme, ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
+import { PaletteMode } from '@mui/material';
 
-// Lazy load components
-const HabitList = React.lazy(() => import('./components/HabitList'));
-const TodoList = React.lazy(() => import('./components/TodoList'));
+interface ThemeContextType {
+  mode: PaletteMode;
+  toggleTheme: () => void;
+}
 
-// Loading component
-const LoadingFallback = () => (
-  <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
-    <CircularProgress />
-  </Box>
-);
+const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-const App: React.FC = () => {
+export const useTheme = () => {
+  const context = useContext(ThemeContext);
+  if (!context) {
+    throw new Error('useTheme must be used within a ThemeProvider');
+  }
+  return context;
+};
+
+interface ThemeProviderProps {
+  children: ReactNode;
+}
+
+export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   const [mode, setMode] = useState<PaletteMode>(() => {
     // Check localStorage for saved theme preference
     const savedMode = localStorage.getItem('themeMode') as PaletteMode;
@@ -37,7 +44,7 @@ const App: React.FC = () => {
     setMode((prevMode) => (prevMode === 'light' ? 'dark' : 'light'));
   };
 
-  const theme = createTheme({
+  const theme: Theme = createTheme({
     palette: {
       mode,
       primary: {
@@ -86,20 +93,10 @@ const App: React.FC = () => {
   });
 
   return (
-    <ThemeProvider theme={theme}>
-      <Router>
-        <Suspense fallback={<LoadingFallback />}>
-          <Routes>
-            <Route path="/" element={<Layout mode={mode} toggleTheme={toggleTheme} />}>
-              <Route index element={<Navigate to="/habits" replace />} />
-              <Route path="habits" element={<HabitList />} />
-              <Route path="tasks" element={<TodoList />} />
-            </Route>
-          </Routes>
-        </Suspense>
-      </Router>
-    </ThemeProvider>
+    <ThemeContext.Provider value={{ mode, toggleTheme }}>
+      <MuiThemeProvider theme={theme}>
+        {children}
+      </MuiThemeProvider>
+    </ThemeContext.Provider>
   );
 };
-
-export default App;
