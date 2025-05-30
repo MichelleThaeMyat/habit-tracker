@@ -14,7 +14,6 @@ import {
   IconButton,
   Tabs,
   Tab,
-  Rating,
   Stack,
   Divider,
 } from '@mui/material';
@@ -131,47 +130,20 @@ const HabitTemplatesDialog: React.FC<HabitTemplatesDialogProps> = ({
   const [sharedTemplates, setSharedTemplates] = useState<SharedHabitTemplate[]>([]);
 
   useEffect(() => {
-    // Fetch shared templates from the data management system
-    const fetchSharedTemplates = async () => {
-      // Replace with actual data fetching logic
-      const response = await new Promise<SharedHabitTemplate[]>(resolve => {
-        setTimeout(() => {
-          resolve([
-            {
-              id: '1',
-              name: "Join a community workout",
-              description: "Participate in group exercises",
-              category: "Health & Fitness",
-              difficulty: "medium",
-              scheduledDays: [1, 3, 5],
-              notes: "Check local listings for groups",
-              tags: ["fitness", "community"],
-              createdBy: "admin",
-              downloads: 120,
-              rating: 4.5,
-            },
-            {
-              id: '2',
-              name: "Weekly meal prep",
-              description: "Plan and prepare your meals",
-              category: "Health & Fitness",
-              difficulty: "medium",
-              scheduledDays: [6, 0],
-              notes: "Use containers to store prepped meals",
-              tags: ["nutrition", "meal prep"],
-              createdBy: "chef_mike",
-              downloads: 95,
-              rating: 4.7,
-            },
-          ]);
-        }, 1000);
-      });
-
-      setSharedTemplates(response);
+    // Load shared templates from localStorage (created by data management)
+    const loadSharedTemplates = () => {
+      try {
+        const stored = localStorage.getItem('sharedTemplates');
+        if (stored) {
+          setSharedTemplates(JSON.parse(stored));
+        }
+      } catch (error) {
+        console.error('Error loading shared templates:', error);
+      }
     };
 
-    fetchSharedTemplates();
-  }, []);
+    loadSharedTemplates();
+  }, [open]); // Reload when dialog opens
 
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
@@ -183,6 +155,20 @@ const HabitTemplatesDialog: React.FC<HabitTemplatesDialogProps> = ({
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
+  };
+
+  const downloadTemplate = (template: SharedHabitTemplate) => {
+    // Increment download count
+    const updatedTemplates = sharedTemplates.map(t => 
+      t.id === template.id 
+        ? { ...t, downloads: t.downloads + 1 }
+        : t
+    );
+    setSharedTemplates(updatedTemplates);
+    localStorage.setItem('sharedTemplates', JSON.stringify(updatedTemplates));
+    
+    // Use the template
+    onSelectTemplate(template);
   };
 
   return (
@@ -197,16 +183,21 @@ const HabitTemplatesDialog: React.FC<HabitTemplatesDialogProps> = ({
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
           Get started quickly with these popular habit templates. You can customize them after adding.
         </Typography>
+        
         <Tabs value={tabValue} onChange={handleTabChange} sx={{ mb: 2 }}>
           <Tab label="Popular Templates" />
-          <Tab label="Shared Templates" />
+          <Tab label={`Shared Templates (${sharedTemplates.length})`} />
         </Tabs>
+
+        {/* Popular Templates Tab */}
         {tabValue === 0 && (
           <Box 
             sx={{ 
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
               gap: 2,
+              maxHeight: '60vh',
+              overflowY: 'auto',
             }}
           >
             {HABIT_TEMPLATES.map((template, index) => (
@@ -219,7 +210,9 @@ const HabitTemplatesDialog: React.FC<HabitTemplatesDialogProps> = ({
                   cursor: 'pointer',
                   '&:hover': {
                     boxShadow: 4,
-                  }
+                    transform: 'translateY(-2px)',
+                  },
+                  transition: 'all 0.2s ease-in-out',
                 }}
                 onClick={() => onSelectTemplate(template)}
               >
@@ -235,7 +228,7 @@ const HabitTemplatesDialog: React.FC<HabitTemplatesDialogProps> = ({
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     {template.description}
                   </Typography>
-                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
                     <Chip 
                       size="small" 
                       label={template.category} 
@@ -249,12 +242,12 @@ const HabitTemplatesDialog: React.FC<HabitTemplatesDialogProps> = ({
                   </Box>
                   {template.notes && (
                     <Typography variant="caption" sx={{ display: 'block', mt: 1, fontStyle: 'italic' }}>
-                      {template.notes}
+                      💡 {template.notes}
                     </Typography>
                   )}
                 </CardContent>
                 <CardActions>
-                  <Button size="small" color="primary">
+                  <Button size="small" color="primary" fullWidth>
                     Use Template
                   </Button>
                 </CardActions>
@@ -262,51 +255,105 @@ const HabitTemplatesDialog: React.FC<HabitTemplatesDialogProps> = ({
             ))}
           </Box>
         )}
+
+        {/* Shared Templates Tab */}
         {tabValue === 1 && (
-          <Box>
+          <Box sx={{ maxHeight: '60vh', overflowY: 'auto' }}>
             {sharedTemplates.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                No shared templates available at the moment.
-              </Typography>
+              <Box sx={{ textAlign: 'center', py: 4 }}>
+                <Typography variant="h6" color="text.secondary" gutterBottom>
+                  No shared templates yet
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Create templates from your habits in the Data Management section to share them here!
+                </Typography>
+              </Box>
             ) : (
-              sharedTemplates.map((template) => (
-                <Card key={template.id} sx={{ mb: 2 }}>
-                  <CardContent>
-                    <Typography variant="h6">{template.name}</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      {template.description}
-                    </Typography>
-                    <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
-                      <Chip label={template.category} variant="outlined" size="small" />
-                      <Chip label={template.difficulty} color={getDifficultyColor(template.difficulty) as any} size="small" />
-                    </Stack>
-                    <Divider sx={{ my: 1 }} />
-                    <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
-                      <PersonIcon fontSize="small" />
-                      <Typography variant="body2" color="text.secondary">
-                        {template.createdBy}
+              <Stack spacing={2}>
+                {sharedTemplates.map((template) => (
+                  <Card 
+                    key={template.id} 
+                    sx={{ 
+                      cursor: 'pointer',
+                      '&:hover': {
+                        boxShadow: 3,
+                      }
+                    }}
+                  >
+                    <CardContent>
+                      <Typography variant="h6" gutterBottom>
+                        {template.name}
                       </Typography>
-                      <StarIcon fontSize="small" color="warning" />
-                      <Typography variant="body2" color="text.secondary">
-                        {template.rating}
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        {template.description}
                       </Typography>
-                      <DownloadIcon fontSize="small" color="action" />
-                      <Typography variant="body2" color="text.secondary">
-                        {template.downloads} downloads
-                      </Typography>
-                    </Stack>
-                  </CardContent>
-                  <CardActions>
-                    <Button 
-                      size="small" 
-                      color="primary" 
-                      onClick={() => onSelectTemplate(template)}
-                    >
-                      Use Template
-                    </Button>
-                  </CardActions>
-                </Card>
-              ))
+                      
+                      {/* Tags */}
+                      <Box sx={{ mb: 2 }}>
+                        <Stack direction="row" spacing={1} flexWrap="wrap">
+                          <Chip label={template.category} variant="outlined" size="small" />
+                          <Chip 
+                            label={template.difficulty} 
+                            color={getDifficultyColor(template.difficulty) as any} 
+                            size="small" 
+                          />
+                          {template.tags.map((tag, index) => (
+                            <Chip 
+                              key={index}
+                              label={`#${tag}`} 
+                              variant="outlined" 
+                              size="small"
+                              sx={{ fontSize: '0.7rem' }}
+                            />
+                          ))}
+                        </Stack>
+                      </Box>
+
+                      {/* Template Notes */}
+                      {template.notes && (
+                        <Typography variant="body2" sx={{ mb: 2, fontStyle: 'italic' }}>
+                          💡 {template.notes}
+                        </Typography>
+                      )}
+
+                      <Divider sx={{ my: 1 }} />
+                      
+                      {/* Template Stats */}
+                      <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <PersonIcon fontSize="small" color="action" />
+                          <Typography variant="body2" color="text.secondary">
+                            {template.createdBy}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <StarIcon fontSize="small" sx={{ color: 'warning.main' }} />
+                          <Typography variant="body2" color="text.secondary">
+                            {template.rating}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <DownloadIcon fontSize="small" color="action" />
+                          <Typography variant="body2" color="text.secondary">
+                            {template.downloads} downloads
+                          </Typography>
+                        </Box>
+                      </Stack>
+                    </CardContent>
+                    <CardActions>
+                      <Button 
+                        size="small" 
+                        color="primary" 
+                        onClick={() => downloadTemplate(template)}
+                        fullWidth
+                        variant="contained"
+                      >
+                        Use Template
+                      </Button>
+                    </CardActions>
+                  </Card>
+                ))}
+              </Stack>
             )}
           </Box>
         )}

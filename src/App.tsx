@@ -33,6 +33,27 @@ const App: React.FC = () => {
     localStorage.setItem('themeMode', mode);
   }, [mode]);
 
+  useEffect(() => {
+    // Handle unhandled promise rejections (like Web Share API errors)
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      // Check if it's a Web Share API AbortError
+      if (event.reason?.name === 'AbortError' || 
+          event.reason?.message?.includes('Share canceled') ||
+          event.reason?.message?.includes('canceled')) {
+        // Prevent the error from being logged to console
+        event.preventDefault();
+        console.log('Share operation was cancelled by user');
+        return;
+      }
+    };
+
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    
+    return () => {
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
+
   const toggleTheme = () => {
     setMode((prevMode) => (prevMode === 'light' ? 'dark' : 'light'));
   };

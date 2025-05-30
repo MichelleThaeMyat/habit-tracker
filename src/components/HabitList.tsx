@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { CircularProgress } from '@mui/material';
 import HabitStats from './HabitStats';
-import HabitTemplatesDialog from './HabitTemplatesDialog';
+import HabitTemplatesDialog from './HabitTemplatesDialogEnhanced';
+import AchievementSystem from './AchievementSystem';
+import SocialFeatures from './SocialFeatures';
+import DataManagement from './DataManagement';
 import {
   Box,
   List,
@@ -26,7 +29,7 @@ import {
   Divider,
   Tooltip,
 } from '@mui/material';
-import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon, Star as StarIcon, Schedule as ScheduleIcon, LibraryBooks as TemplatesIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon, Star as StarIcon, Schedule as ScheduleIcon, LibraryBooks as TemplatesIcon, EmojiEvents as TrophyIcon, Group as GroupIcon, Storage as StorageIcon } from '@mui/icons-material';
 import { format } from 'date-fns';
 
 const HABIT_CATEGORIES = [
@@ -132,6 +135,31 @@ const HabitList: React.FC = () => {
   const [filterCategory, setFilterCategory] = useState('All');
   const [sortBy, setSortBy] = useState<'name' | 'created' | 'streak' | 'difficulty'>('created');
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [achievementsOpen, setAchievementsOpen] = useState(false);
+  const [socialFeaturesOpen, setSocialFeaturesOpen] = useState(false);
+  const [dataManagementOpen, setDataManagementOpen] = useState(false);
+
+  // Calculate user profile for achievements
+  const calculateUserProfile = () => {
+    const savedAchievements = JSON.parse(localStorage.getItem('achievements') || '[]');
+    const totalPoints = savedAchievements.reduce((sum: number, achievement: any) => 
+      achievement.unlocked ? sum + achievement.points : sum, 0
+    );
+    
+    // Level calculation: every 100 points = 1 level
+    const level = Math.floor(totalPoints / 100) + 1;
+    const experiencePoints = totalPoints % 100;
+    const experienceToNextLevel = 100;
+    
+    return {
+      totalPoints,
+      level,
+      experiencePoints,
+      experienceToNextLevel,
+    };
+  };
+
+  const userProfile = calculateUserProfile();
 
   const handleOpenDialog = (habit?: Habit) => {
     if (habit) {
@@ -306,10 +334,35 @@ const HabitList: React.FC = () => {
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button
             variant="outlined"
+            startIcon={<TrophyIcon />}
+            onClick={() => setAchievementsOpen(true)}
+            sx={{ 
+              border: userProfile.level > 1 ? '2px solid gold' : undefined,
+              position: 'relative',
+            }}
+          >
+            Level {userProfile.level}
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<GroupIcon />}
+            onClick={() => setSocialFeaturesOpen(true)}
+          >
+            Social
+          </Button>
+          <Button
+            variant="outlined"
             startIcon={<TemplatesIcon />}
             onClick={() => setTemplatesOpen(true)}
           >
             Templates
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<StorageIcon />}
+            onClick={() => setDataManagementOpen(true)}
+          >
+            Data
           </Button>
           <Button
             variant="contained"
@@ -442,11 +495,11 @@ const HabitList: React.FC = () => {
                 secondary={
                   <Box>
                     {habit.description && (
-                      <Typography variant="body2" sx={{ mb: 1 }}>
+                      <Typography variant="body2" component="div" sx={{ mb: 1 }}>
                         {habit.description}
                       </Typography>
                     )}
-                    <Typography variant="body2">{`Created on ${format(habit.createdAt, 'PP')}`}</Typography>
+                    <Typography variant="body2" component="div">{`Created on ${format(habit.createdAt, 'PP')}`}</Typography>
                     <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
                       {Array.from({ length: 7 }).map((_, index) => {
                         const date = new Date();
@@ -457,7 +510,7 @@ const HabitList: React.FC = () => {
                         const isScheduled = habit.scheduledDays.includes(dayOfWeek);
                         return (
                           <Box key={dateStr} sx={{ textAlign: 'center' }}>
-                            <Typography variant="caption">{dayName}</Typography>
+                            <Typography variant="caption" component="div">{dayName}</Typography>
                             <Box
                               sx={{
                                 width: 20,
@@ -476,14 +529,14 @@ const HabitList: React.FC = () => {
                         );
                       })}
                     </Box>
-                    <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>
+                    <Typography variant="caption" component="div" sx={{ display: 'block', mt: 1 }}>
                       Current Streak: {habit.currentStreak} days | Best Streak: {habit.bestStreak} days
                     </Typography>
-                    <Typography variant="caption" sx={{ display: 'block' }}>
+                    <Typography variant="caption" component="div" sx={{ display: 'block' }}>
                       Scheduled: {habit.scheduledDays.map(day => DAYS_OF_WEEK.find(d => d.value === day)?.label).join(', ')}
                     </Typography>
                     {habit.notes && (
-                      <Typography variant="caption" sx={{ display: 'block', mt: 0.5, fontStyle: 'italic' }}>
+                      <Typography variant="caption" component="div" sx={{ display: 'block', mt: 0.5, fontStyle: 'italic' }}>
                         Notes: {habit.notes}
                       </Typography>
                     )}
@@ -625,6 +678,27 @@ const HabitList: React.FC = () => {
         open={templatesOpen} 
         onClose={() => setTemplatesOpen(false)} 
         onSelectTemplate={handleSelectTemplate}
+      />
+
+      <AchievementSystem
+        habits={habits}
+        open={achievementsOpen}
+        onClose={() => setAchievementsOpen(false)}
+        userProfile={userProfile}
+      />
+
+      <SocialFeatures
+        habits={habits}
+        open={socialFeaturesOpen}
+        onClose={() => setSocialFeaturesOpen(false)}
+        userProfile={userProfile}
+      />
+
+      <DataManagement
+        habits={habits}
+        open={dataManagementOpen}
+        onClose={() => setDataManagementOpen(false)}
+        onHabitsUpdate={setHabits}
       />
     </Box>
   );
