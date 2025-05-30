@@ -100,6 +100,26 @@ const ACHIEVEMENT_DEFINITIONS: Omit<Achievement, 'progress' | 'unlocked' | 'unlo
     points: 100,
   },
   {
+    id: 'two_week_streak',
+    title: 'Two Week Champion',
+    description: 'Maintain a 14-day streak',
+    icon: <StarIcon />,
+    type: 'streak',
+    requirement: 14,
+    rarity: 'common',
+    points: 40,
+  },
+  {
+    id: 'month_long_streak',
+    title: 'Monthly Master',
+    description: 'Maintain a 60-day streak',
+    icon: <TrophyIcon />,
+    type: 'streak',
+    requirement: 60,
+    rarity: 'epic',
+    points: 250,
+  },
+  {
     id: 'legendary_streak',
     title: 'Legendary Streak',
     description: 'Maintain a 100-day streak',
@@ -108,6 +128,16 @@ const ACHIEVEMENT_DEFINITIONS: Omit<Achievement, 'progress' | 'unlocked' | 'unlo
     requirement: 100,
     rarity: 'legendary',
     points: 500,
+  },
+  {
+    id: 'habit_deity',
+    title: 'Habit Deity',
+    description: 'Achieve a 365-day streak',
+    icon: <DiamondIcon />,
+    type: 'streak',
+    requirement: 365,
+    rarity: 'legendary',
+    points: 2000,
   },
   
   // Completion Achievements
@@ -122,6 +152,16 @@ const ACHIEVEMENT_DEFINITIONS: Omit<Achievement, 'progress' | 'unlocked' | 'unlo
     points: 5,
   },
   {
+    id: 'fifty_completions',
+    title: 'Half Century',
+    description: 'Complete 50 habits total',
+    icon: <CheckIcon />,
+    type: 'completion',
+    requirement: 50,
+    rarity: 'common',
+    points: 75,
+  },
+  {
     id: 'century_club',
     title: 'Century Club',
     description: 'Complete 100 habits total',
@@ -130,6 +170,16 @@ const ACHIEVEMENT_DEFINITIONS: Omit<Achievement, 'progress' | 'unlocked' | 'unlo
     requirement: 100,
     rarity: 'rare',
     points: 150,
+  },
+  {
+    id: 'five_hundred_club',
+    title: 'Elite Five Hundred',
+    description: 'Complete 500 habits total',
+    icon: <TrophyIcon />,
+    type: 'completion',
+    requirement: 500,
+    rarity: 'epic',
+    points: 400,
   },
   {
     id: 'thousand_completions',
@@ -154,6 +204,26 @@ const ACHIEVEMENT_DEFINITIONS: Omit<Achievement, 'progress' | 'unlocked' | 'unlo
     points: 20,
   },
   {
+    id: 'habit_enthusiast',
+    title: 'Habit Enthusiast',
+    description: 'Create 10 different habits',
+    icon: <TimelineIcon />,
+    type: 'milestone',
+    requirement: 10,
+    rarity: 'rare',
+    points: 50,
+  },
+  {
+    id: 'habit_architect',
+    title: 'Habit Architect',
+    description: 'Create 20 different habits',
+    icon: <TimelineIcon />,
+    type: 'milestone',
+    requirement: 20,
+    rarity: 'epic',
+    points: 100,
+  },
+  {
     id: 'category_master',
     title: 'Category Master',
     description: 'Create habits in 5 different categories',
@@ -162,6 +232,78 @@ const ACHIEVEMENT_DEFINITIONS: Omit<Achievement, 'progress' | 'unlocked' | 'unlo
     requirement: 5,
     rarity: 'rare',
     points: 75,
+  },
+  {
+    id: 'perfectionist',
+    title: 'Perfectionist',
+    description: 'Complete all habits for 7 consecutive days',
+    icon: <DiamondIcon />,
+    type: 'milestone',
+    requirement: 7,
+    rarity: 'epic',
+    points: 200,
+  },
+  {
+    id: 'habit_master_single',
+    title: 'Habit Mastery',
+    description: 'Complete a single habit 50 times',
+    icon: <TrophyIcon />,
+    type: 'milestone',
+    requirement: 50,
+    rarity: 'rare',
+    points: 150,
+  },
+  
+  // Task-Specific Achievements
+  {
+    id: 'task_streak_starter',
+    title: 'Task Streak Starter',
+    description: 'Build a 3-day streak on a recurring task',
+    icon: <FireIcon />,
+    type: 'streak',
+    requirement: 3,
+    rarity: 'common',
+    points: 15,
+  },
+  {
+    id: 'task_week_warrior',
+    title: 'Task Week Warrior',
+    description: 'Maintain a 7-day task streak',
+    icon: <StarIcon />,
+    type: 'streak',
+    requirement: 7,
+    rarity: 'common',
+    points: 30,
+  },
+  {
+    id: 'task_momentum_master',
+    title: 'Momentum Master',
+    description: 'Achieve 80+ momentum score on a task',
+    icon: <LightningIcon />,
+    type: 'milestone',
+    requirement: 80,
+    rarity: 'rare',
+    points: 75,
+  },
+  {
+    id: 'task_consistency_king',
+    title: 'Consistency King',
+    description: 'Maintain a 30-day task streak',
+    icon: <TrophyIcon />,
+    type: 'streak',
+    requirement: 30,
+    rarity: 'epic',
+    points: 200,
+  },
+  {
+    id: 'recurring_task_creator',
+    title: 'Recurring Task Creator',
+    description: 'Create your first recurring task',
+    icon: <TimelineIcon />,
+    type: 'milestone',
+    requirement: 1,
+    rarity: 'common',
+    points: 10,
   },
   
   // Social Achievements
@@ -195,11 +337,47 @@ const calculateUserProgress = (habits: Habit[]) => {
   const maxStreak = Math.max(...habits.map(h => h.bestStreak), 0);
   const uniqueCategories = new Set(habits.map(h => h.category)).size;
   
+  // Calculate max completions for a single habit
+  const maxSingleHabitCompletions = Math.max(...habits.map(habit => 
+    Object.values(habit.weeklyProgress).filter(Boolean).length
+  ), 0);
+  
+  // Calculate consecutive days where all habits were completed
+  const allHabitsCompletedDays = () => {
+    if (habits.length === 0) return 0;
+    
+    // Get all dates where habits could be completed
+    const allDates = new Set<string>();
+    habits.forEach(habit => {
+      Object.keys(habit.weeklyProgress).forEach(date => allDates.add(date));
+    });
+    
+    const sortedDates = Array.from(allDates).sort();
+    let maxConsecutive = 0;
+    let currentConsecutive = 0;
+    
+    for (const date of sortedDates) {
+      // Check if all habits were completed on this date
+      const allCompleted = habits.every(habit => habit.weeklyProgress[date] === true);
+      
+      if (allCompleted) {
+        currentConsecutive++;
+        maxConsecutive = Math.max(maxConsecutive, currentConsecutive);
+      } else {
+        currentConsecutive = 0;
+      }
+    }
+    
+    return maxConsecutive;
+  };
+  
   return {
     totalCompletions,
     maxStreak,
     totalHabits: habits.length,
     uniqueCategories,
+    maxSingleHabitCompletions,
+    perfectDays: allHabitsCompletedDays(),
   };
 };
 
@@ -221,8 +399,16 @@ const checkAchievements = (habits: Habit[], savedAchievements: Achievement[]): A
       case 'milestone':
         if (def.id === 'habit_collector') {
           currentProgress = progress.totalHabits;
+        } else if (def.id === 'habit_enthusiast') {
+          currentProgress = progress.totalHabits;
+        } else if (def.id === 'habit_architect') {
+          currentProgress = progress.totalHabits;
         } else if (def.id === 'category_master') {
           currentProgress = progress.uniqueCategories;
+        } else if (def.id === 'perfectionist') {
+          currentProgress = progress.perfectDays;
+        } else if (def.id === 'habit_master_single') {
+          currentProgress = progress.maxSingleHabitCompletions;
         }
         break;
       case 'social':
