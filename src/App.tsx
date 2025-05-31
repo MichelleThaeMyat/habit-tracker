@@ -6,6 +6,7 @@ import Layout from './components/Layout';
 // Lazy load components
 const HabitList = React.lazy(() => import('./components/HabitList'));
 const TodoList = React.lazy(() => import('./components/TodoList'));
+const RoutinesPage = React.lazy(() => import('./components/RoutinesPage'));
 
 // Loading component
 const LoadingFallback = () => (
@@ -115,6 +116,7 @@ const App: React.FC = () => {
               <Route index element={<Navigate to="/habits" replace />} />
               <Route path="habits" element={<HabitList />} />
               <Route path="tasks" element={<TodoList />} />
+              <Route path="routines" element={<RoutinesPage />} />
             </Route>
           </Routes>
         </Suspense>

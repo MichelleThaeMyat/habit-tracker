@@ -61,6 +61,7 @@ const Layout: React.FC<LayoutProps> = ({ mode, toggleTheme }) => {
         >
           <Tab label="Habits" value="habits" />
           <Tab label="Tasks" value="tasks" />
+          <Tab label="Routines" value="routines" />
         </Tabs>
       </AppBar>
       <Container component="main" sx={{ mt: 4, mb: 4, flex: 1 }}>

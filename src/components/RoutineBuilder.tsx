@@ -81,6 +81,7 @@ interface RoutineBuilderProps {
   open: boolean;
   onClose: () => void;
   habits: Array<{ id: string; name: string; category: string }>;
+  isPage?: boolean; // New prop to determine if used as page or modal
 }
 
 interface TabPanelProps {
@@ -97,7 +98,7 @@ function TabPanel({ children, value, index }: TabPanelProps) {
   );
 }
 
-const RoutineBuilder: React.FC<RoutineBuilderProps> = ({ open, onClose, habits }) => {
+const RoutineBuilder: React.FC<RoutineBuilderProps> = ({ open, onClose, habits, isPage = false }) => {
   const [tabValue, setTabValue] = useState(0);
   const [routines, setRoutines] = useState<Routine[]>(() => {
     const saved = localStorage.getItem('habitRoutines');
@@ -540,7 +541,205 @@ const RoutineBuilder: React.FC<RoutineBuilderProps> = ({ open, onClose, habits }
         </Card>
       </Box>
     );
-  };
+  };  const renderContent = () => (
+    <Box sx={{ width: '100%' }}>
+      <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)}>
+        <Tab icon={<RoutineIcon />} label="My Routines" />
+        <Tab 
+          icon={
+            <Badge badgeContent={activeSession ? 1 : 0} color="primary">
+              <PlayIcon />
+            </Badge>
+          } 
+          label="Active Session" 
+        />
+        <Tab icon={<StarIcon />} label="Templates" />
+      </Tabs>
+
+      <TabPanel value={tabValue} index={0}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Typography variant="h6">My Routines</Typography>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setCreateDialogOpen(true)}
+          >
+            Create Routine
+          </Button>
+        </Box>
+
+        {routines.length === 0 ? (
+          <Alert severity="info">
+            No routines created yet. Start by creating a routine from a template or build your own custom routine.
+          </Alert>
+        ) : (
+          routines.map(routine => renderRoutineCard(routine))
+        )}
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={1}>
+        {renderActiveSession()}
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={2}>
+        <Typography variant="h6" gutterBottom>Routine Templates</Typography>
+        <Typography variant="body2" color="text.secondary" gutterBottom sx={{ mb: 3 }}>
+          Start with a proven routine template and customize it to your needs.
+        </Typography>
+
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: 2 }}>
+          {ROUTINE_TEMPLATES.map(template => (
+            <Card key={template.id} sx={{ height: '100%' }}>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    {getTypeIcon(template.type)}
+                    <Typography variant="h6" sx={{ ml: 1 }}>
+                      {template.name}
+                    </Typography>
+                  </Box>
+
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    {template.description}
+                  </Typography>
+
+                  <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+                    <Chip
+                      icon={<TimeIcon />}
+                      label={`${template.estimatedDuration}min`}
+                      size="small"
+                      variant="outlined"
+                    />
+                    <Chip
+                      label={template.difficulty}
+                      size="small"
+                      color={
+                        template.difficulty === 'beginner' ? 'success' :
+                        template.difficulty === 'intermediate' ? 'warning' : 'error'
+                      }
+                    />
+                    <Chip
+                      icon={getContextIcon(template.context)}
+                      label={template.context}
+                      size="small"
+                      variant="outlined"
+                    />
+                  </Box>
+
+                  <Typography variant="body2" gutterBottom>
+                    {template.habits.length} habits included
+                  </Typography>
+
+                  <Accordion>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                      <Typography variant="body2">View Habits</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <List dense>
+                        {template.habits.map((habit, index) => (
+                          <ListItem key={index}>
+                            <ListItemText
+                              primary={habit.name}
+                              secondary={`${habit.estimatedDuration}min${habit.isOptional ? ' (optional)' : ''}`}
+                            />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </AccordionDetails>
+                  </Accordion>
+
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    sx={{ mt: 2 }}
+                    onClick={() => {
+                      setSelectedTemplate(template);
+                      setNewRoutine({
+                        name: template.name,
+                        description: template.description,
+                        type: template.type,
+                        context: template.context,
+                      });
+                      setCreateDialogOpen(true);
+                    }}
+                  >
+                    Use Template
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </Box>
+      </TabPanel>
+    </Box>
+  );
+
+  if (isPage) {
+    return (
+      <>
+        {renderContent()}
+        
+        {/* Create Routine Dialog */}
+        <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="sm" fullWidth>
+          <DialogTitle>
+            {selectedTemplate ? `Create from ${selectedTemplate.name}` : 'Create New Routine'}
+          </DialogTitle>
+          <DialogContent>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+              <TextField
+                label="Routine Name"
+                value={newRoutine.name}
+                onChange={(e) => setNewRoutine({ ...newRoutine, name: e.target.value })}
+                fullWidth
+              />
+              
+              <TextField
+                label="Description"
+                value={newRoutine.description}
+                onChange={(e) => setNewRoutine({ ...newRoutine, description: e.target.value })}
+                multiline
+                rows={2}
+                fullWidth
+              />
+
+              <FormControl fullWidth>
+                <InputLabel>Type</InputLabel>
+                <Select
+                  value={newRoutine.type}
+                  label="Type"
+                  onChange={(e) => setNewRoutine({ ...newRoutine, type: e.target.value as Routine['type'] })}
+                >
+                  <MenuItem value="morning">Morning</MenuItem>
+                  <MenuItem value="evening">Evening</MenuItem>
+                  <MenuItem value="workout">Workout</MenuItem>
+                  <MenuItem value="work">Work</MenuItem>
+                  <MenuItem value="custom">Custom</MenuItem>
+                </Select>
+              </FormControl>
+
+              <FormControl fullWidth>
+                <InputLabel>Context</InputLabel>
+                <Select
+                  value={newRoutine.context}
+                  label="Context"
+                  onChange={(e) => setNewRoutine({ ...newRoutine, context: e.target.value as Routine['context'] })}
+                >
+                  <MenuItem value="home">Home</MenuItem>
+                  <MenuItem value="work">Work</MenuItem>
+                  <MenuItem value="gym">Gym</MenuItem>
+                  <MenuItem value="anywhere">Anywhere</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleCreateRoutine} variant="contained" disabled={!newRoutine.name.trim()}>
+              Create Routine
+            </Button>
+          </DialogActions>
+        </Dialog>
+      </>
+    );
+  }
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -552,134 +751,7 @@ const RoutineBuilder: React.FC<RoutineBuilderProps> = ({ open, onClose, habits }
       </DialogTitle>
 
       <DialogContent>
-        <Box sx={{ width: '100%' }}>
-          <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)}>
-            <Tab icon={<RoutineIcon />} label="My Routines" />
-            <Tab 
-              icon={
-                <Badge badgeContent={activeSession ? 1 : 0} color="primary">
-                  <PlayIcon />
-                </Badge>
-              } 
-              label="Active Session" 
-            />
-            <Tab icon={<StarIcon />} label="Templates" />
-          </Tabs>
-
-          <TabPanel value={tabValue} index={0}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-              <Typography variant="h6">My Routines</Typography>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => setCreateDialogOpen(true)}
-              >
-                Create Routine
-              </Button>
-            </Box>
-
-            {routines.length === 0 ? (
-              <Alert severity="info">
-                No routines created yet. Start by creating a routine from a template or build your own custom routine.
-              </Alert>
-            ) : (
-              routines.map(routine => renderRoutineCard(routine))
-            )}
-          </TabPanel>
-
-          <TabPanel value={tabValue} index={1}>
-            {renderActiveSession()}
-          </TabPanel>
-
-          <TabPanel value={tabValue} index={2}>
-            <Typography variant="h6" gutterBottom>Routine Templates</Typography>
-            <Typography variant="body2" color="text.secondary" gutterBottom sx={{ mb: 3 }}>
-              Start with a proven routine template and customize it to your needs.
-            </Typography>
-
-            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: 2 }}>
-              {ROUTINE_TEMPLATES.map(template => (
-                <Card key={template.id} sx={{ height: '100%' }}>
-                    <CardContent>
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                        {getTypeIcon(template.type)}
-                        <Typography variant="h6" sx={{ ml: 1 }}>
-                          {template.name}
-                        </Typography>
-                      </Box>
-                      
-                      <Typography variant="body2" color="text.secondary" gutterBottom>
-                        {template.description}
-                      </Typography>
-
-                      <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
-                        <Chip
-                          icon={<TimeIcon />}
-                          label={`${template.estimatedDuration}min`}
-                          size="small"
-                          variant="outlined"
-                        />
-                        <Chip
-                          label={template.difficulty}
-                          size="small"
-                          color={
-                            template.difficulty === 'beginner' ? 'success' :
-                            template.difficulty === 'intermediate' ? 'warning' : 'error'
-                          }
-                        />
-                        <Chip
-                          icon={getContextIcon(template.context)}
-                          label={template.context}
-                          size="small"
-                          variant="outlined"
-                        />
-                      </Box>
-
-                      <Typography variant="body2" gutterBottom>
-                        {template.habits.length} habits included
-                      </Typography>
-
-                      <Accordion>
-                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                          <Typography variant="body2">View Habits</Typography>
-                        </AccordionSummary>
-                        <AccordionDetails>
-                          <List dense>
-                            {template.habits.map((habit, index) => (
-                              <ListItem key={index}>
-                                <ListItemText
-                                  primary={habit.name}
-                                  secondary={`${habit.estimatedDuration}min${habit.isOptional ? ' (optional)' : ''}`}
-                                />
-                              </ListItem>
-                            ))}
-                          </List>
-                        </AccordionDetails>
-                      </Accordion>
-
-                      <Button
-                        variant="contained"
-                        fullWidth
-                        sx={{ mt: 2 }}
-                        onClick={() => {
-                          setSelectedTemplate(template);
-                          setNewRoutine({
-                            name: template.name,
-                            description: template.description,
-                            type: template.type,
-                            context: template.context,
-                          });
-                          setCreateDialogOpen(true);
-                        }}
-                      >
-                        Use Template
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
-              </Box>
-          </TabPanel>
-        </Box>
+        {renderContent()}
       </DialogContent>
 
       <DialogActions>
