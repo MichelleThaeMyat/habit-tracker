@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   List,
@@ -19,6 +19,10 @@ import {
   Tooltip,
   FormControlLabel,
   Switch,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
@@ -33,6 +37,7 @@ import {
   Schedule as ScheduleIcon,
   Warning as WarningIcon,
   SmartToy as AIIcon,
+  Psychology as PsychologyIcon,
 } from '@mui/icons-material';
 import StreakIndicator from './StreakIndicator';
 import MotivationalNotification from './MotivationalNotification';
@@ -45,6 +50,14 @@ import {
   getDeadlineStatus,
   isTaskOverdue
 } from '../utils/smartPrioritization';
+import { 
+  calculateTaskPriority, 
+  sortTasksByPriority, 
+  getTopPriorityTasks, 
+  generateTaskInsights,
+  type TaskContext,
+  type TaskPriorityScore 
+} from '../utils/taskPrioritization';
 
 interface Todo {
   id: string;
@@ -97,6 +110,15 @@ const TodoList: React.FC = () => {
   const [isRecurring, setIsRecurring] = useState(false);
   const [deadline, setDeadline] = useState<string>('');
   const [energyLevel, setEnergyLevel] = useState<'low' | 'medium' | 'high'>('medium');
+  const [sortBy, setSortBy] = useState<'urgency' | 'deadline' | 'priority' | 'created' | 'aiPriority'>('urgency');
+  
+  // AI Prioritization state
+  const [aiPrioritizationEnabled, setAiPrioritizationEnabled] = useState(() => {
+    const saved = localStorage.getItem('aiTaskPrioritizationEnabled');
+    return saved ? JSON.parse(saved) : false;
+  });
+  const [priorityInsights, setPriorityInsights] = useState<string[]>([]);
+  const [topPriorityTasks, setTopPriorityTasks] = useState<TaskPriorityScore[]>([]);
   
   // Notification state
   const [notificationOpen, setNotificationOpen] = useState(false);
@@ -106,6 +128,49 @@ const TodoList: React.FC = () => {
     completionCount: number;
     isNewRecord: boolean;
   } | null>(null);
+
+  // Effect to update AI prioritization when enabled/disabled
+  useEffect(() => {
+    localStorage.setItem('aiTaskPrioritizationEnabled', JSON.stringify(aiPrioritizationEnabled));
+    
+    if (aiPrioritizationEnabled && todos.length > 0) {
+      // Convert todos to TaskContext format
+      const taskContexts: TaskContext[] = todos.map(todo => ({
+        id: todo.id,
+        title: todo.title,
+        description: todo.description,
+        completed: todo.completed,
+        priority: todo.priority,
+        createdAt: todo.createdAt,
+        isRecurring: todo.isRecurring,
+        currentStreak: todo.currentStreak,
+        bestStreak: todo.bestStreak,
+        completionHistory: todo.completionHistory,
+        lastCompletedDate: todo.lastCompletedDate,
+        momentumScore: todo.momentumScore,
+        deadline: todo.deadline,
+        suggestedPriority: todo.suggestedPriority,
+        energyLevel: todo.energyLevel,
+        optimalTimeSlots: todo.optimalTimeSlots,
+        urgencyScore: todo.urgencyScore
+      }));
+      
+      // Generate insights and priority recommendations
+      const insights = generateTaskInsights(taskContexts);
+      setPriorityInsights(insights);
+      
+      const topPriorities = getTopPriorityTasks(taskContexts, 3);
+      setTopPriorityTasks(topPriorities);
+    } else {
+      setPriorityInsights([]);
+      setTopPriorityTasks([]);
+    }
+  }, [aiPrioritizationEnabled, todos]);
+
+  // Toggle AI prioritization
+  const handleToggleAiPrioritization = () => {
+    setAiPrioritizationEnabled(!aiPrioritizationEnabled);
+  };
 
   const handleOpenDialog = (todo?: Todo) => {
     if (todo) {
@@ -415,6 +480,39 @@ const TodoList: React.FC = () => {
             />
           </Tooltip>
         )}
+        {aiPrioritizationEnabled && (() => {
+          const taskContext: TaskContext = {
+            id: todo.id,
+            title: todo.title,
+            description: todo.description,
+            completed: todo.completed,
+            priority: todo.priority,
+            createdAt: todo.createdAt,
+            isRecurring: todo.isRecurring,
+            currentStreak: todo.currentStreak,
+            bestStreak: todo.bestStreak,
+            completionHistory: todo.completionHistory,
+            lastCompletedDate: todo.lastCompletedDate,
+            momentumScore: todo.momentumScore,
+            deadline: todo.deadline,
+            suggestedPriority: todo.suggestedPriority,
+            energyLevel: todo.energyLevel,
+            optimalTimeSlots: todo.optimalTimeSlots,
+            urgencyScore: todo.urgencyScore
+          };
+          const aiScore = calculateTaskPriority(taskContext);
+          return (
+            <Tooltip title={`AI Priority Score: ${aiScore.priorityScore}/100 - ${aiScore.reason}`}>
+              <Chip
+                label={`AI: ${aiScore.priorityScore}/100`}
+                size="small"
+                color="info"
+                variant="outlined"
+                icon={<AIIcon />}
+              />
+            </Tooltip>
+          );
+        })()}
       </Box>
     );
   };
@@ -501,30 +599,222 @@ const TodoList: React.FC = () => {
     );
   };
 
+  // Sort todos based on selected criteria
+  const getSortedTodos = () => {
+    const sortedTodos = [...todos];
+    
+    switch (sortBy) {
+      case 'aiPriority':
+        if (aiPrioritizationEnabled) {
+          // Convert todos to TaskContext and calculate AI priorities
+          const taskContexts: TaskContext[] = todos.map(todo => ({
+            id: todo.id,
+            title: todo.title,
+            description: todo.description,
+            completed: todo.completed,
+            priority: todo.priority,
+            createdAt: todo.createdAt,
+            isRecurring: todo.isRecurring,
+            currentStreak: todo.currentStreak,
+            bestStreak: todo.bestStreak,
+            completionHistory: todo.completionHistory,
+            lastCompletedDate: todo.lastCompletedDate,
+            momentumScore: todo.momentumScore,
+            deadline: todo.deadline,
+            suggestedPriority: todo.suggestedPriority,
+            energyLevel: todo.energyLevel,
+            optimalTimeSlots: todo.optimalTimeSlots,
+            urgencyScore: todo.urgencyScore
+          }));
+          
+          return sortTasksByPriority(taskContexts);
+        }
+        // Fallback to urgency if AI is disabled
+        return sortedTodos.sort((a, b) => b.urgencyScore - a.urgencyScore);
+      
+      case 'urgency':
+        return sortedTodos.sort((a, b) => {
+          if (a.completed !== b.completed) return a.completed ? 1 : -1;
+          return b.urgencyScore - a.urgencyScore;
+        });
+      
+      case 'deadline':
+        return sortedTodos.sort((a, b) => {
+          if (a.completed !== b.completed) return a.completed ? 1 : -1;
+          if (!a.deadline && !b.deadline) return 0;
+          if (!a.deadline) return 1;
+          if (!b.deadline) return -1;
+          return a.deadline.getTime() - b.deadline.getTime();
+        });
+      
+      case 'priority':
+        const priorityOrder = { high: 3, medium: 2, low: 1 };
+        return sortedTodos.sort((a, b) => {
+          if (a.completed !== b.completed) return a.completed ? 1 : -1;
+          return priorityOrder[b.priority] - priorityOrder[a.priority];
+        });
+      
+      case 'created':
+        return sortedTodos.sort((a, b) => {
+          if (a.completed !== b.completed) return a.completed ? 1 : -1;
+          return b.createdAt.getTime() - a.createdAt.getTime();
+        });
+      
+      default:
+        return sortedTodos.sort((a, b) => {
+          if (a.completed !== b.completed) return a.completed ? 1 : -1;
+          return b.urgencyScore - a.urgencyScore;
+        });
+    }
+  };
+
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h5">My Tasks</Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => handleOpenDialog()}
-        >
-          Add Task
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={aiPrioritizationEnabled}
+                onChange={handleToggleAiPrioritization}
+                color="primary"
+                icon={<PsychologyIcon />}
+                checkedIcon={<AIIcon />}
+              />
+            }
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <AIIcon color={aiPrioritizationEnabled ? 'primary' : 'disabled'} />
+                <Typography variant="body2">
+                  AI Priority
+                </Typography>
+              </Box>
+            }
+          />
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenDialog()}
+          >
+            Add Task
+          </Button>
+        </Box>
       </Box>
 
+      {/* Sort Controls */}
+      <Box sx={{ mb: 2, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+        <FormControl size="small" sx={{ minWidth: 150 }}>
+          <InputLabel>Sort by</InputLabel>
+          <Select
+            value={sortBy}
+            label="Sort by"
+            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+          >
+            {aiPrioritizationEnabled && (
+              <MenuItem value="aiPriority">
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <AIIcon fontSize="small" />
+                  AI Priority
+                </Box>
+              </MenuItem>
+            )}
+            <MenuItem value="urgency">
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <WarningIcon fontSize="small" />
+                Urgency
+              </Box>
+            </MenuItem>
+            <MenuItem value="deadline">
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <ScheduleIcon fontSize="small" />
+                Deadline
+              </Box>
+            </MenuItem>
+            <MenuItem value="priority">
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <FlagIcon fontSize="small" />
+                Priority
+              </Box>
+            </MenuItem>
+            <MenuItem value="created">Created Date</MenuItem>
+          </Select>
+        </FormControl>
+        
+        {aiPrioritizationEnabled && (
+          <Typography variant="caption" color="primary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <AIIcon fontSize="small" />
+            AI recommendations active
+          </Typography>
+        )}
+      </Box>
+
+      {/* AI Insights Dashboard */}
+      {aiPrioritizationEnabled && (priorityInsights.length > 0 || topPriorityTasks.length > 0) && (
+        <Box sx={{ 
+          mb: 3, 
+          p: 2, 
+          bgcolor: 'primary.light', 
+          borderRadius: 2,
+          border: '1px solid',
+          borderColor: 'primary.main'
+        }}>
+          <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1, color: 'primary.dark' }}>
+            <AIIcon />
+            AI Task Insights
+          </Typography>
+          
+          {/* Top Priority Tasks */}
+          {topPriorityTasks.length > 0 && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" gutterBottom>
+                🎯 Top Priority Tasks Right Now:
+              </Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                {topPriorityTasks.map((taskScore, index) => {
+                  const task = todos.find(t => t.id === taskScore.taskId);
+                  return (
+                    <Chip
+                      key={taskScore.taskId}
+                      label={`${index + 1}. ${task?.title || 'Unknown'} (${taskScore.priorityScore}/100)`}
+                      color="primary"
+                      variant="filled"
+                      size="small"
+                      icon={index === 0 ? <StarIcon /> : <TrophyIcon />}
+                    />
+                  );
+                })}
+              </Stack>
+            </Box>
+          )}
+          
+          {/* AI Insights */}
+          {priorityInsights.length > 0 && (
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                💡 AI Recommendations:
+              </Typography>
+              <Stack spacing={1}>
+                {priorityInsights.map((insight, index) => (
+                  <Typography 
+                    key={index}
+                    variant="body2" 
+                    sx={{ 
+                      color: 'primary.dark',
+                      '&::before': { content: '"• "' }
+                    }}
+                  >
+                    {insight}
+                  </Typography>
+                ))}
+              </Stack>
+            </Box>
+          )}
+        </Box>
+      )}
+
       <List>
-        {todos
-          .sort((a, b) => {
-            // Sort by completion status first (incomplete tasks first)
-            if (a.completed !== b.completed) {
-              return a.completed ? 1 : -1;
-            }
-            // Then by urgency score (highest urgency first)
-            return b.urgencyScore - a.urgencyScore;
-          })
-          .map((todo) => (
+        {getSortedTodos().map((todo) => (
           <ListItem
             key={todo.id}
             sx={{
@@ -562,6 +852,22 @@ const TodoList: React.FC = () => {
                       size="small"
                       color="primary"
                       variant="outlined"
+                    />
+                  )}
+                  {aiPrioritizationEnabled && sortBy === 'aiPriority' && (
+                    <Chip
+                      icon={<AIIcon />}
+                      label="AI Recommended"
+                      size="small"
+                      color="secondary"
+                      variant="filled"
+                      sx={{
+                        animation: 'glow 2s ease-in-out infinite alternate',
+                        '@keyframes glow': {
+                          '0%': { boxShadow: '0 0 5px rgba(156, 39, 176, 0.5)' },
+                          '100%': { boxShadow: '0 0 20px rgba(156, 39, 176, 0.8)' },
+                        },
+                      }}
                     />
                   )}
                 </Box>

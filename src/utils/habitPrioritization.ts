@@ -21,85 +21,131 @@ export interface HabitPriorityScore {
   suggestions: string[];
 }
 
-// Calculate AI-powered habit priority score
+// Calculate AI-powered habit priority score (0-100 scale)
 export const calculateHabitPriority = (habit: HabitContext): HabitPriorityScore => {
-  let score = 0;
   const reasons: string[] = [];
   const suggestions: string[] = [];
   
-  // Base score from difficulty (harder habits get slightly higher priority when not in streak)
-  const difficultyMultiplier = { easy: 1, medium: 1.2, hard: 1.5 };
+  // Input validation
+  if (!habit || typeof habit !== 'object') {
+    throw new Error('Invalid habit object provided');
+  }
   
-  // Streak-based scoring (prioritize maintaining streaks)
-  if (habit.currentStreak > 0) {
-    const streakBonus = Math.min(30, habit.currentStreak * 2);
-    score += streakBonus;
-    reasons.push(`Maintaining ${habit.currentStreak}-day streak`);
+  // Ensure currentStreak is non-negative
+  const currentStreak = Math.max(0, habit.currentStreak || 0);
+  const bestStreak = Math.max(0, habit.bestStreak || 0);
+  
+  // Calculate individual factor scores (each contributes to final 0-100 score)
+  let streakScore = 0;
+  let categoryScore = 0;
+  let urgencyScore = 0;
+  let progressScore = 0;
+  let difficultyScore = 0;
+  
+  // 1. Streak-based scoring (0-35% of final score)
+  if (currentStreak > 0) {
+    let baseStreakScore = Math.min(30, currentStreak * 2); // 0-30 base
     
-    if (habit.currentStreak >= 7) {
-      suggestions.push("You're on a great streak! Don't break it now.");
-    }
-    
-    // Extra priority for habits close to personal records
-    if (habit.currentStreak >= habit.bestStreak * 0.8) {
-      score += 15;
+    // Bonus for habits close to personal records
+    if (currentStreak >= bestStreak * 0.8) {
+      baseStreakScore += 5; // Up to 35 total
       reasons.push("Close to personal best");
       suggestions.push("You're approaching your personal record!");
     }
+    
+    streakScore = baseStreakScore;
+    reasons.push(`Maintaining ${currentStreak}-day streak`);
+    
+    if (currentStreak >= 7) {
+      suggestions.push("You're on a great streak! Don't break it now.");
+    }
   } else {
-    // No current streak - prioritize restarting
-    score += 20;
+    // No current streak - moderate priority for restarting
+    streakScore = 15;
     reasons.push("Restart momentum");
     suggestions.push("Perfect time to restart this habit!");
   }
   
-  // Category-based priorities (health habits get higher priority)
+  // 2. Category-based priorities (0-10% of final score)
   const categoryPriority = {
-    'Health & Fitness': 25,
-    'Mindfulness': 20,
-    'Personal Development': 18,
-    'Productivity': 15,
-    'Learning': 15,
-    'Relationships': 12,
-    'Finance': 10,
-    'Hobbies': 8,
-    'General': 5
+    'Health & Fitness': 10,
+    'Mindfulness': 8,
+    'Personal Development': 7,
+    'Productivity': 6,
+    'Learning': 6,
+    'Relationships': 5,
+    'Finance': 4,
+    'Hobbies': 3,
+    'General': 2
   };
   
-  const categoryScore = categoryPriority[habit.category as keyof typeof categoryPriority] || 5;
-  score += categoryScore;
+  categoryScore = categoryPriority[habit.category as keyof typeof categoryPriority] || 2;
   
-  // Time-based urgency (habits scheduled for today get higher priority)
-  const today = new Date().getDay();
-  if (habit.scheduledDays.includes(today)) {
-    score += 25;
+  // 3. Time-based urgency (0-30% of final score)
+  const todayDayOfWeek = new Date().getDay();
+  if (habit.scheduledDays.includes(todayDayOfWeek)) {
+    urgencyScore = 30;
     reasons.push("Scheduled for today");
+  } else {
+    urgencyScore = 5; // Still some base urgency
   }
   
-  // Weekly completion rate (prioritize habits that are falling behind)
-  const weeklyCompletions = Object.values(habit.weeklyProgress).filter(Boolean).length;
-  const possibleCompletions = habit.scheduledDays.length; // Simplified for demo
-  const completionRate = weeklyCompletions / Math.max(1, possibleCompletions);
+  // 4. Weekly completion progress (0-20% of final score)
+  // Only count THIS week's progress (not historical data)
+  const now = new Date();
+  const startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() - now.getDay()); // Start of this week (Sunday)
+  
+  const thisWeekCompletions = Object.entries(habit.weeklyProgress)
+    .filter(([dateStr, completed]) => {
+      const date = new Date(dateStr);
+      return date >= startOfWeek && date <= now && completed;
+    }).length;
+  
+  const possibleCompletions = habit.scheduledDays.length;
+  const completionRate = thisWeekCompletions / Math.max(1, possibleCompletions);
   
   if (completionRate < 0.5) {
-    score += 20;
+    progressScore = 20; // High priority for falling behind
     reasons.push("Behind on weekly goal");
     suggestions.push("This habit needs attention this week.");
   } else if (completionRate > 0.8) {
-    score += 10;
+    progressScore = 5; // Lower priority when doing well
     reasons.push("Doing well this week");
+  } else {
+    progressScore = 12; // Medium priority for average progress
   }
   
-  // Apply difficulty multiplier
-  score *= difficultyMultiplier[habit.difficulty];
+  // 5. Difficulty factor (0-5% of final score) - easier habits get higher priority
+  const difficultyPoints = { easy: 5, medium: 3, hard: 1 };
+  difficultyScore = difficultyPoints[habit.difficulty];
+  
+  if (habit.difficulty === 'easy') {
+    reasons.push("Easy to complete");
+  } else if (habit.difficulty === 'hard') {
+    reasons.push("Challenging habit");
+    suggestions.push("Start with easier habits first, then tackle this one.");
+  }
+  
+  // Calculate final score (0-100) by summing weighted components
+  let finalScore = (
+    streakScore +           // Max 35 points (35% weight)
+    urgencyScore +          // Max 30 points (30% weight)
+    progressScore +         // Max 20 points (20% weight)
+    categoryScore +         // Max 10 points (10% weight)
+    difficultyScore         // Max 5 points (5% weight)
+  );                        // Total max: 100 points
   
   // Reduce priority if already completed today
   if (habit.completed) {
-    score *= 0.3;
+    finalScore *= 0.3;
     reasons.push("Already completed today");
   }
   
-  // Determine urgency level
+  // Ensure score stays within 0-100 range
+  const score = Math.max(0, Math.min(100, Math.round(finalScore)));
+  
+    // Determine urgency level based on 0-100 scale
   let urgencyLevel: 'low' | 'medium' | 'high' = 'low';
   if (score >= 70) urgencyLevel = 'high';
   else if (score >= 40) urgencyLevel = 'medium';
@@ -113,7 +159,7 @@ export const calculateHabitPriority = (habit: HabitContext): HabitPriorityScore 
   
   return {
     habitId: habit.name,
-    priorityScore: Math.round(score),
+    priorityScore: score,
     reason: reasons.join(', '),
     urgencyLevel,
     suggestions

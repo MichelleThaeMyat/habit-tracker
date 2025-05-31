@@ -10,6 +10,10 @@ import DailyMotivationDashboard from './DailyMotivationDashboard';
 import StreakIndicator from './StreakIndicator';
 import QuickStats from './QuickStats';
 import MotivationalNotification from './MotivationalNotification';
+import AnalyticsDashboard from './AnalyticsDashboard';
+import RoutineBuilder from './RoutineBuilder';
+import HabitStacking from './HabitStacking';
+import ContextBundles from './ContextBundles';
 import {
   Box,
   List,
@@ -34,7 +38,7 @@ import {
   Divider,
   Tooltip,
 } from '@mui/material';
-import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon, Star as StarIcon, Schedule as ScheduleIcon, LibraryBooks as TemplatesIcon, EmojiEvents as TrophyIcon, Group as GroupIcon, Storage as StorageIcon, Notifications as NotificationsIcon, Psychology as PsychologyIcon, TrendingUp as TrendingUpIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon, Star as StarIcon, Schedule as ScheduleIcon, LibraryBooks as TemplatesIcon, EmojiEvents as TrophyIcon, Group as GroupIcon, Storage as StorageIcon, Notifications as NotificationsIcon, Psychology as PsychologyIcon, TrendingUp as TrendingUpIcon, Analytics as AnalyticsIcon, Timeline as RoutineIcon, Link as StackIcon, BusinessCenter as ContextIcon } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { 
   calculateHabitPriority, 
@@ -188,6 +192,10 @@ const HabitList: React.FC = () => {
   const [socialFeaturesOpen, setSocialFeaturesOpen] = useState(false);
   const [dataManagementOpen, setDataManagementOpen] = useState(false);
   const [remindersOpen, setRemindersOpen] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const [routineBuilderOpen, setRoutineBuilderOpen] = useState(false);
+  const [habitStackingOpen, setHabitStackingOpen] = useState(false);
+  const [contextBundlesOpen, setContextBundlesOpen] = useState(false);
   
   // AI Prioritization state
   const [aiPrioritizationEnabled, setAiPrioritizationEnabled] = useState(() => {
@@ -651,6 +659,42 @@ const HabitList: React.FC = () => {
                   onClick={() => setRemindersOpen(true)}
                 >
                   <NotificationsIcon />
+                </Button>
+              </Tooltip>
+              <Tooltip title="Analytics Dashboard">
+                <Button
+                  variant="outlined"
+                  sx={{ borderRadius: 2 }}
+                  onClick={() => setAnalyticsOpen(true)}
+                >
+                  <AnalyticsIcon />
+                </Button>
+              </Tooltip>
+              <Tooltip title="Routine Builder">
+                <Button
+                  variant="outlined"
+                  sx={{ borderRadius: 2 }}
+                  onClick={() => setRoutineBuilderOpen(true)}
+                >
+                  <RoutineIcon />
+                </Button>
+              </Tooltip>
+              <Tooltip title="Habit Stacking">
+                <Button
+                  variant="outlined"
+                  sx={{ borderRadius: 2 }}
+                  onClick={() => setHabitStackingOpen(true)}
+                >
+                  <StackIcon />
+                </Button>
+              </Tooltip>
+              <Tooltip title="Context Bundles">
+                <Button
+                  variant="outlined"
+                  sx={{ borderRadius: 2 }}
+                  onClick={() => setContextBundlesOpen(true)}
+                >
+                  <ContextIcon />
                 </Button>
               </Tooltip>
               <Tooltip title={aiPrioritizationEnabled ? "Disable AI Prioritization" : "Enable AI Prioritization"}>
@@ -1157,6 +1201,34 @@ const HabitList: React.FC = () => {
           <SmartReminders
             open={remindersOpen}
             onClose={() => setRemindersOpen(false)}
+            habits={habits}
+          />
+
+          {/* Analytics Dashboard */}
+          <AnalyticsDashboard
+            habits={habits}
+            open={analyticsOpen}
+            onClose={() => setAnalyticsOpen(false)}
+          />
+
+          {/* Routine Builder */}
+          <RoutineBuilder
+            open={routineBuilderOpen}
+            onClose={() => setRoutineBuilderOpen(false)}
+            habits={habits}
+          />
+
+          {/* Habit Stacking */}
+          <HabitStacking
+            open={habitStackingOpen}
+            onClose={() => setHabitStackingOpen(false)}
+            habits={habits}
+          />
+
+          {/* Context Bundles */}
+          <ContextBundles
+            open={contextBundlesOpen}
+            onClose={() => setContextBundlesOpen(false)}
             habits={habits}
           />
 
