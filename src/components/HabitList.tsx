@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { CircularProgress } from '@mui/material';
-import HabitStats from './HabitStats';
 import HabitTemplatesDialog from './HabitTemplatesDialogEnhanced';
 import AchievementSystem from './AchievementSystem';
 import SocialFeatures from './SocialFeatures';
@@ -35,8 +34,16 @@ import {
   Divider,
   Tooltip,
 } from '@mui/material';
-import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon, Star as StarIcon, Schedule as ScheduleIcon, LibraryBooks as TemplatesIcon, EmojiEvents as TrophyIcon, Group as GroupIcon, Storage as StorageIcon, Notifications as NotificationsIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon, Star as StarIcon, Schedule as ScheduleIcon, LibraryBooks as TemplatesIcon, EmojiEvents as TrophyIcon, Group as GroupIcon, Storage as StorageIcon, Notifications as NotificationsIcon, Psychology as PsychologyIcon, TrendingUp as TrendingUpIcon } from '@mui/icons-material';
 import { format } from 'date-fns';
+import { 
+  calculateHabitPriority, 
+  sortHabitsByPriority, 
+  getTopPriorityHabits, 
+  generateHabitInsights,
+  type HabitContext,
+  type HabitPriorityScore 
+} from '../utils/habitPrioritization';
 
 const HABIT_CATEGORIES = [
   'General', 'Health & Fitness', 'Productivity', 'Personal Development', 
@@ -104,10 +111,15 @@ const HabitList: React.FC = () => {
           if (isNaN(createdAtDate.getTime())) {
             throw new Error('Invalid date format in habit data');
           }
+          
+          // Check if habit is completed today (daily reset functionality)
+          const today = format(new Date(), 'yyyy-MM-dd');
+          const isCompletedToday = habit.weeklyProgress?.[today] || false;
+          
           return {
             id: habit.id || String(Date.now()),
             name: habit.name || '',
-            completed: Boolean(habit.completed),
+            completed: isCompletedToday, // Set based on today's completion, not persistent status
             createdAt: createdAtDate,
             weeklyProgress: habit.weeklyProgress || {},
             currentStreak: Number(habit.currentStreak) || 0,
@@ -130,6 +142,37 @@ const HabitList: React.FC = () => {
       setIsLoading(false);
     }
   }, []);
+
+  // Daily reset effect - checks every minute for date changes
+  useEffect(() => {
+    const checkForDateChange = () => {
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const lastCheckedDate = localStorage.getItem('lastCheckedDate');
+      
+      if (lastCheckedDate !== today) {
+        // Date has changed, update all habits' completion status
+        setHabits(prevHabits => {
+          const updatedHabits = prevHabits.map(habit => ({
+            ...habit,
+            completed: habit.weeklyProgress?.[today] || false
+          }));
+          localStorage.setItem('habits', JSON.stringify(updatedHabits));
+          return updatedHabits;
+        });
+        
+        // Update the last checked date
+        localStorage.setItem('lastCheckedDate', today);
+      }
+    };
+
+    // Check immediately
+    checkForDateChange();
+    
+    // Set up interval to check every minute
+    const intervalId = setInterval(checkForDateChange, 60000);
+    
+    return () => clearInterval(intervalId);
+  }, [habits]);
   const [open, setOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [habitName, setHabitName] = useState('');
@@ -139,12 +182,20 @@ const HabitList: React.FC = () => {
   const [habitNotes, setHabitNotes] = useState('');
   const [habitDescription, setHabitDescription] = useState('');
   const [filterCategory, setFilterCategory] = useState('All');
-  const [sortBy, setSortBy] = useState<'name' | 'created' | 'streak' | 'difficulty'>('created');
+  const [sortBy, setSortBy] = useState<'name' | 'created' | 'streak' | 'difficulty' | 'priority'>('created');
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [achievementsOpen, setAchievementsOpen] = useState(false);
   const [socialFeaturesOpen, setSocialFeaturesOpen] = useState(false);
   const [dataManagementOpen, setDataManagementOpen] = useState(false);
   const [remindersOpen, setRemindersOpen] = useState(false);
+  
+  // AI Prioritization state
+  const [aiPrioritizationEnabled, setAiPrioritizationEnabled] = useState(() => {
+    const saved = localStorage.getItem('aiPrioritizationEnabled');
+    return saved ? JSON.parse(saved) : false;
+  });
+  const [priorityInsights, setPriorityInsights] = useState<string[]>([]);
+  const [topPriorityHabits, setTopPriorityHabits] = useState<HabitPriorityScore[]>([]);
   
   // Motivational notification state
   const [notificationOpen, setNotificationOpen] = useState(false);
@@ -176,6 +227,41 @@ const HabitList: React.FC = () => {
   };
 
   const userProfile = calculateUserProfile();
+
+  // Effect to update AI prioritization when enabled/disabled
+  useEffect(() => {
+    localStorage.setItem('aiPrioritizationEnabled', JSON.stringify(aiPrioritizationEnabled));
+    
+    if (aiPrioritizationEnabled && habits.length > 0) {
+      // Convert habits to HabitContext format
+      const habitContexts: HabitContext[] = habits.map(habit => ({
+        name: habit.name,
+        description: habit.description,
+        category: habit.category,
+        difficulty: habit.difficulty,
+        currentStreak: habit.currentStreak,
+        bestStreak: habit.bestStreak,
+        scheduledDays: habit.scheduledDays,
+        completed: habit.completed,
+        weeklyProgress: habit.weeklyProgress
+      }));
+      
+      // Generate insights and priority recommendations
+      const insights = generateHabitInsights(habitContexts);
+      setPriorityInsights(insights);
+      
+      const topPriorities = getTopPriorityHabits(habitContexts, 3);
+      setTopPriorityHabits(topPriorities);
+    } else {
+      setPriorityInsights([]);
+      setTopPriorityHabits([]);
+    }
+  }, [aiPrioritizationEnabled, habits]);
+
+  // Toggle AI prioritization
+  const handleToggleAiPrioritization = () => {
+    setAiPrioritizationEnabled(!aiPrioritizationEnabled);
+  };
 
   const handleOpenDialog = (habit?: Habit) => {
     if (habit) {
@@ -259,24 +345,45 @@ const HabitList: React.FC = () => {
     setHabits(prevHabits => {
       const updatedHabits = prevHabits.map(habit => {
         if (habit.id === id) {
-          // Update this habit's completion status
-          const isNowCompleted = !habit.completed;
-          
-          // Update weekly progress
+          // Update weekly progress for today
           const updatedWeeklyProgress = { ...habit.weeklyProgress };
+          const isCurrentlyCompletedToday = updatedWeeklyProgress[today] || false;
+          const isNowCompleted = !isCurrentlyCompletedToday;
+          
+          // Update today's completion status
           updatedWeeklyProgress[today] = isNowCompleted;
           
-          // Calculate streak only if the habit is now completed
-          let currentStreak = habit.currentStreak;
-          let bestStreak = habit.bestStreak;
-          
+          // Calculate current streak based on consecutive completed days
+          let currentStreak = 0;
           if (isNowCompleted) {
-            currentStreak += 1;
-            if (currentStreak > bestStreak) {
-              bestStreak = currentStreak;
+            // Count consecutive days backward from today
+            let checkDate = new Date();
+            while (true) {
+              const checkDateStr = format(checkDate, 'yyyy-MM-dd');
+              const dayOfWeek = checkDate.getDay();
+              
+              // Only count days this habit is scheduled for
+              if (habit.scheduledDays.includes(dayOfWeek) && updatedWeeklyProgress[checkDateStr]) {
+                currentStreak++;
+                checkDate.setDate(checkDate.getDate() - 1);
+              } else if (habit.scheduledDays.includes(dayOfWeek)) {
+                // If it's a scheduled day but not completed, break the streak
+                break;
+              } else {
+                // If it's not a scheduled day, skip to the previous day
+                checkDate.setDate(checkDate.getDate() - 1);
+              }
+              
+              // Stop if we've gone back too far (prevent infinite loop)
+              if (currentStreak > 365) break;
             }
-            
-            // Trigger motivational notification for habit completion
+          }
+          
+          // Update best streak if current streak is higher
+          const bestStreak = Math.max(habit.bestStreak, currentStreak);
+          
+          // Trigger motivational notification for habit completion
+          if (isNowCompleted) {
             const completionCount = Object.values(updatedWeeklyProgress).filter(Boolean).length;
             const isNewRecord = currentStreak > habit.bestStreak;
             
@@ -287,13 +394,11 @@ const HabitList: React.FC = () => {
               isNewRecord
             });
             setNotificationOpen(true);
-          } else {
-            currentStreak = 0;
           }
           
           return {
             ...habit,
-            completed: isNowCompleted,
+            completed: isNowCompleted, // This now represents today's completion status
             weeklyProgress: updatedWeeklyProgress,
             currentStreak,
             bestStreak
@@ -357,6 +462,25 @@ const HabitList: React.FC = () => {
   const filteredAndSortedHabits = habits
     .filter(habit => filterCategory === 'All' || habit.category === filterCategory)
     .sort((a, b) => {
+      // If AI prioritization is enabled and sorting by priority, use AI sorting
+      if (aiPrioritizationEnabled && sortBy === 'priority') {
+        const habitContexts: HabitContext[] = [a, b].map(habit => ({
+          name: habit.name,
+          description: habit.description,
+          category: habit.category,
+          difficulty: habit.difficulty,
+          currentStreak: habit.currentStreak,
+          bestStreak: habit.bestStreak,
+          scheduledDays: habit.scheduledDays,
+          completed: habit.completed,
+          weeklyProgress: habit.weeklyProgress
+        }));
+        
+        const priorityA = calculateHabitPriority(habitContexts[0]);
+        const priorityB = calculateHabitPriority(habitContexts[1]);
+        return priorityB.priorityScore - priorityA.priorityScore;
+      }
+      
       switch (sortBy) {
         case 'name':
           return a.name.localeCompare(b.name);
@@ -529,11 +653,110 @@ const HabitList: React.FC = () => {
                   <NotificationsIcon />
                 </Button>
               </Tooltip>
+              <Tooltip title={aiPrioritizationEnabled ? "Disable AI Prioritization" : "Enable AI Prioritization"}>
+                <Button
+                  variant={aiPrioritizationEnabled ? "contained" : "outlined"}
+                  sx={{ 
+                    borderRadius: 2,
+                    bgcolor: aiPrioritizationEnabled ? 'primary.main' : 'transparent',
+                    color: aiPrioritizationEnabled ? 'primary.contrastText' : 'primary.main'
+                  }}
+                  onClick={handleToggleAiPrioritization}
+                >
+                  <PsychologyIcon />
+                  <Box component="span" sx={{ ml: 0.5, display: { xs: 'none', sm: 'inline' } }}>
+                    AI
+                  </Box>
+                </Button>
+              </Tooltip>
             </Box>
           </Box>
 
           {/* Daily Motivation Dashboard */}
           <DailyMotivationDashboard habits={habits} />
+
+          {/* AI Prioritization Insights */}
+          {aiPrioritizationEnabled && (
+            <Box sx={{ mb: 3, p: 3, bgcolor: 'background.paper', borderRadius: 2, boxShadow: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <PsychologyIcon color="primary" />
+                <Typography variant="h6" component="h3">
+                  AI-Powered Insights
+                </Typography>
+              </Box>
+              
+              {priorityInsights.length > 0 && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Personal Insights:
+                  </Typography>
+                  {priorityInsights.map((insight, index) => (
+                    <Typography key={index} variant="body2" sx={{ mb: 1, pl: 2 }}>
+                      {insight}
+                    </Typography>
+                  ))}
+                </Box>
+              )}
+              
+              {topPriorityHabits.length > 0 && (
+                <Box>
+                  <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <TrendingUpIcon fontSize="small" />
+                    Recommended Priority Order:
+                  </Typography>
+                  {topPriorityHabits.map((priority, index) => (
+                    <Box key={index} sx={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: 2, 
+                      p: 2, 
+                      mb: 1, 
+                      bgcolor: 'action.hover', 
+                      borderRadius: 1,
+                      border: priority.urgencyLevel === 'high' ? '2px solid' : '1px solid',
+                      borderColor: priority.urgencyLevel === 'high' ? 'error.main' : 
+                                  priority.urgencyLevel === 'medium' ? 'warning.main' : 'success.main'
+                    }}>
+                      <Box sx={{ 
+                        minWidth: 24, 
+                        height: 24, 
+                        borderRadius: '50%', 
+                        bgcolor: priority.urgencyLevel === 'high' ? 'error.main' : 
+                                priority.urgencyLevel === 'medium' ? 'warning.main' : 'success.main',
+                        color: 'white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '0.875rem',
+                        fontWeight: 'bold'
+                      }}>
+                        {index + 1}
+                      </Box>
+                      <Box sx={{ flex: 1 }}>
+                        <Typography variant="body2" fontWeight="medium">
+                          {priority.habitId}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Score: {priority.priorityScore} • {priority.reason}
+                        </Typography>
+                        {priority.suggestions.length > 0 && (
+                          <Typography variant="caption" sx={{ display: 'block', fontStyle: 'italic', mt: 0.5 }}>
+                            💡 {priority.suggestions[0]}
+                          </Typography>
+                        )}
+                      </Box>
+                      <Chip 
+                        size="small" 
+                        label={priority.urgencyLevel.toUpperCase()} 
+                        color={priority.urgencyLevel === 'high' ? 'error' : 
+                              priority.urgencyLevel === 'medium' ? 'warning' : 'success'}
+                      />
+                    </Box>
+                  ))}
+                </Box>
+              )}
+            </Box>
+          )}
 
           {/* Filter and Sort Controls */}
           <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -558,12 +781,20 @@ const HabitList: React.FC = () => {
               <Select
                 value={sortBy}
                 label="Sort By"
-                onChange={(e) => setSortBy(e.target.value as 'name' | 'created' | 'streak' | 'difficulty')}
+                onChange={(e) => setSortBy(e.target.value as 'name' | 'created' | 'streak' | 'difficulty' | 'priority')}
               >
                 <MenuItem value="created">Created Date</MenuItem>
                 <MenuItem value="name">Name</MenuItem>
                 <MenuItem value="streak">Current Streak</MenuItem>
                 <MenuItem value="difficulty">Difficulty</MenuItem>
+                {aiPrioritizationEnabled && (
+                  <MenuItem value="priority">
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <PsychologyIcon fontSize="small" />
+                      AI Priority
+                    </Box>
+                  </MenuItem>
+                )}
               </Select>
             </FormControl>
 
@@ -601,6 +832,23 @@ const HabitList: React.FC = () => {
               const todayDayOfWeek = new Date().getDay();
               const isScheduledToday = habit.scheduledDays.includes(todayDayOfWeek);
               
+              // Calculate AI priority if enabled
+              let aiPriority: HabitPriorityScore | null = null;
+              if (aiPrioritizationEnabled) {
+                const habitContext: HabitContext = {
+                  name: habit.name,
+                  description: habit.description,
+                  category: habit.category,
+                  difficulty: habit.difficulty,
+                  currentStreak: habit.currentStreak,
+                  bestStreak: habit.bestStreak,
+                  scheduledDays: habit.scheduledDays,
+                  completed: habit.completed,
+                  weeklyProgress: habit.weeklyProgress
+                };
+                aiPriority = calculateHabitPriority(habitContext);
+              }
+              
               return (
                 <ListItem
                   key={habit.id}
@@ -610,6 +858,10 @@ const HabitList: React.FC = () => {
                     borderRadius: 1,
                     boxShadow: 1,
                     opacity: isScheduledToday ? 1 : 0.6,
+                    borderLeft: aiPrioritizationEnabled && aiPriority ? `4px solid ${
+                      aiPriority.urgencyLevel === 'high' ? '#f44336' :
+                      aiPriority.urgencyLevel === 'medium' ? '#ff9800' : '#4caf50'
+                    }` : 'none'
                   }}
                 >
                   <Tooltip title={isScheduledToday ? "Click to mark complete" : "Not scheduled for today"}>
@@ -645,6 +897,16 @@ const HabitList: React.FC = () => {
                         />
                         <HabitMastery habit={habit} compact={true} />
                         <StreakIndicator habit={habit} compact={true} />
+                        {aiPrioritizationEnabled && aiPriority && (
+                          <Chip
+                            size="small"
+                            icon={<PsychologyIcon />}
+                            label={`Priority: ${aiPriority.priorityScore}`}
+                            color={aiPriority.urgencyLevel === 'high' ? 'error' : 
+                                  aiPriority.urgencyLevel === 'medium' ? 'warning' : 'success'}
+                            variant="filled"
+                          />
+                        )}
                         {!isScheduledToday && (
                           <Chip
                             size="small"
@@ -698,6 +960,31 @@ const HabitList: React.FC = () => {
                         <Typography variant="caption" component="div" sx={{ display: 'block' }}>
                           Scheduled: {habit.scheduledDays.map(day => DAYS_OF_WEEK.find(d => d.value === day)?.label).join(', ')}
                         </Typography>
+                        {aiPrioritizationEnabled && aiPriority && (
+                          <Typography variant="caption" component="div" sx={{ 
+                            display: 'block', 
+                            mt: 0.5, 
+                            p: 1, 
+                            bgcolor: 'action.hover', 
+                            borderRadius: 1,
+                            border: '1px solid',
+                            borderColor: aiPriority.urgencyLevel === 'high' ? 'error.main' : 
+                                        aiPriority.urgencyLevel === 'medium' ? 'warning.main' : 'success.main'
+                          }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                              <PsychologyIcon fontSize="small" />
+                              <strong>AI Priority: {aiPriority.priorityScore}/100 ({aiPriority.urgencyLevel.toUpperCase()})</strong>
+                            </Box>
+                            <Typography variant="caption" color="text.secondary">
+                              {aiPriority.reason}
+                            </Typography>
+                            {aiPriority.suggestions.length > 0 && (
+                              <Typography variant="caption" sx={{ display: 'block', fontStyle: 'italic', mt: 0.5 }}>
+                                💡 {aiPriority.suggestions[0]}
+                              </Typography>
+                            )}
+                          </Typography>
+                        )}
                         {habit.notes && (
                           <Typography variant="caption" component="div" sx={{ display: 'block', mt: 0.5, fontStyle: 'italic' }}>
                             Notes: {habit.notes}
